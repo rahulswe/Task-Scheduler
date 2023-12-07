@@ -27,6 +27,8 @@
 
 /* Function Prototypes */
 
+void initialise_monitor_handles();
+
 __attribute__((naked)) void init_scheduler_stack(uint32_t scheduler_stk_top);
 
 void task1_handler();
@@ -365,6 +367,10 @@ int main(void)
 	/* Initialization */
 
 	enable_processor_faults();
+
+	initialise_monitor_handles();
+
+	printf("Application Running\n");
 
 	/* setting MSP to a scheduler stack start which
 	 * is pointing to the top of scheduler stack area
