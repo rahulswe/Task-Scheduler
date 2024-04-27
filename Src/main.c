@@ -55,6 +55,11 @@ task_t g_current_task = TASK_1;
 
 uint32_t g_tick_count = 0;
 
+void sw_delay() {
+	uint32_t volatile cnt = 0;
+	for(cnt = 0; cnt < 100000; cnt++);
+}
+
 /* Task Handlers */
 
 /* Note for all the printf:
@@ -64,18 +69,21 @@ uint32_t g_tick_count = 0;
 
 void task1_handler() {
 	while(1) {
+		sw_delay();
 		printf("Task1 Running\n");
 	}
 }
 
 void task2_handler() {
 	while(1) {
+		sw_delay();
 		printf("Task2 Running\n");
 	}
 }
 
 void task3_handler() {
 	while(1) {
+		sw_delay();
 #ifdef TEST
 		task_tcb[TASK_1].current_state = TASK_BLOCKED;
 		task_tcb[TASK_2].current_state = TASK_BLOCKED;
@@ -90,12 +98,14 @@ void task3_handler() {
 
 void task4_handler() {
 	while(1) {
+		sw_delay();
 		printf("Task4 Running\n");
 	}
 }
 
 void idle_task_handler() {
 	while(1) {
+		sw_delay();
 		printf("Idle Task Running\n");
 	}
 }
