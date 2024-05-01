@@ -377,6 +377,19 @@ __attribute__((naked)) void PendSV_Handler(){
 	__asm volatile("POP {PC}");
 }
 
+void start_scheduler(void) {
+	init_systick_timer(TICK_HZ);
+
+	/* switch from MSP to PSP initialized to the Task1 PSP Start
+	 * Note: Till this point MSP was used which was initialized to the
+	 * the top of stack = Task1 PSP Start */
+	switch_from_msp_to_psp();
+
+	/* launch one of the task */
+	g_current_task = TASK_1;
+	task1_handler();
+}
+
 /* Main Function */
 int main(void)
 {
@@ -396,16 +409,8 @@ int main(void)
 
 	init_tasks();
 
-	init_systick_timer(TICK_HZ);
-
-	/* switch from MSP to PSP initialized to the Task1 PSP Start
-	 * Note: Till this point MSP was used which was initialized to the
-	 * the top of stack = Task1 PSP Start */
-	switch_from_msp_to_psp();
-
-	/* launch one of the task */
-	g_current_task = TASK_1;
-	task1_handler();
+	/* start scheduler */
+	start_scheduler();
 
     /* Loop forever */
 	for(;;);
