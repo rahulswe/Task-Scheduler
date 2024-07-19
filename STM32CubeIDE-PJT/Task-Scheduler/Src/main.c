@@ -25,7 +25,9 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdbool.h>
+
 #include "main.h"
+#include "priority_queue.h"
 
 #if !defined(__SOFT_FP__) && defined(__ARM_FP)
   #warning "FPU is not initialized, but the project is compiling for an FPU. Please initialize the FPU before use."
@@ -50,6 +52,7 @@ void update_task_state();
 /* Global Variables */
 
 TCB_t task_tcb[NUM_TASKS];
+priority_queue_t task_rdy_queue;
 
 task_t g_current_task = TASK_1;
 
@@ -168,10 +171,26 @@ void init_task_stack(){
 }
 
 void init_tasks() {
+	pq_item_t data;
 
-	for(uint8_t tsk = 0; tsk < NUM_TASKS; tsk++) {
+	task_tcb[IDLE_TASK].block_cnt = IDLE_TASK;
+	task_tcb[IDLE_TASK].current_state = TASK_READY;
+	task_tcb[IDLE_TASK].priority = 1;
+
+	/* enqueue task into the ready queue */
+	data.task_id = IDLE_TASK;
+	data.priority = task_tcb[IDLE_TASK].priority;
+	pq_enqueue(&task_rdy_queue, data);
+
+	for(uint8_t tsk = TASK_1; tsk < NUM_TASKS; tsk++) {
 		task_tcb[tsk].block_cnt = 0;
 		task_tcb[tsk].current_state = TASK_READY;
+		task_tcb[tsk].priority = 1+tsk;
+
+		/* enqueue task into the ready queue */
+		data.task_id = tsk;
+		data.priority = task_tcb[tsk].priority;
+		pq_enqueue(&task_rdy_queue, data);
 	}
 
 	task_tcb[IDLE_TASK].psp = IDLE_TASK_STACK_START;
@@ -185,6 +204,7 @@ void init_tasks() {
 	task_tcb[TASK_2].task_handler = task2_handler;
 	task_tcb[TASK_3].task_handler = task3_handler;
 	task_tcb[TASK_4].task_handler = task4_handler;
+
 
 	init_task_stack();
 }
@@ -288,32 +308,12 @@ void context_switch() {
 }
 
 void select_next_task() {
-#ifdef MY_SCHEDULER_IMPLEMENTATION
-	for(uint8_t i = 1; i < NUM_TASKS; i++) {
-		g_current_task = (g_current_task + 1) % NUM_TASKS;
-		if(g_current_task == IDLE_TASK) {
-				g_current_task++;
-		}
-		if(task_tcb[g_current_task].current_state == TASK_READY){
-			return;
-		}
-	}
-	/* all the user tasks are blocked, so run the IDLE task */
-	g_current_task = IDLE_TASK;
-#else
-	task_state_t state = TASK_BLOCKED;
-	for(uint8_t i = 0; i < NUM_TASKS; i++) {
-		g_current_task = (g_current_task + 1) % NUM_TASKS;
-		state = task_tcb[g_current_task].current_state;
-		if((state == TASK_READY) && (g_current_task != IDLE_TASK)) {
-			break;
-		}
-	}
-	/* all the user tasks are blocked, so run the IDLE task */
-	if(state == TASK_BLOCKED) {
-		g_current_task = IDLE_TASK;
-	}
-#endif
+	/* get the task with highest priority
+	 * from the task ready queue. At least
+	 * idle task is guaranteed to be present
+	 * all the time in the queue. */
+	pq_item_t top = pq_peek(&task_rdy_queue);
+	g_current_task = top.task_id;
 }
 
 void update_task_state(){

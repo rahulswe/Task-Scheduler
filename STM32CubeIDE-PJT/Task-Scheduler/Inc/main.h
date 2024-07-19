@@ -83,6 +83,7 @@ typedef enum {
 } task_t;
 
 typedef struct {
+	uint8_t priority;
 	uint32_t psp;
 	uint32_t block_cnt;//blocking duration
 	task_state_t current_state;
