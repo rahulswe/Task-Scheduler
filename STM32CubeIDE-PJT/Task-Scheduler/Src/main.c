@@ -146,9 +146,10 @@ void init_task_stack(){
 	uint32_t *psp;
 	for(uint8_t tsk = 0; tsk < NUM_TASKS; tsk++) {
 		psp = (uint32_t*)(task_tcb[tsk].psp);
-		//stack content -> xpsr, pc, lr, r12, r3, r2, r1, r0, r11 to r4
+		//stack content -> xpsr, pc, lr, r12, r3, r2, r1, r0, lr, r11 to r4
 		//psp is decremented first as in CMx processor, stack utilization method is full descending
 
+		////////////////////SF1/////////////////////
 		psp--;
 		*psp = DUMMY_XPSR;
 
@@ -156,12 +157,24 @@ void init_task_stack(){
 		*psp = (uint32_t)task_tcb[tsk].task_handler;
 
 		psp--;
-		*psp = DUMMY_EXC_RET;
+		*psp = DUMMY_EXC_RET; //Don't Care -> In freeRTOS, it is set to address of dummy task return err function
 
-		for(uint8_t i = 0; i < CM4_NUM_GPR; i++) {
+		for(uint8_t i = 0; i < 5; i++) { //R0 to R3, R12
 			psp--;
 			*psp = 0;
 		}
+		/////////////////////////////////////////////
+
+		////////////////////SF2/////////////////////
+		psp--;
+		*psp = DUMMY_EXC_RET;
+
+		for(uint8_t i = 0; i < 8; i++) { //R4 to R11
+			psp--;
+			*psp = 0;
+		}
+		////////////////////SF1/////////////////////
+
 		task_tcb[tsk].psp = (uint32_t)psp;
 	}
 
@@ -337,7 +350,7 @@ void SysTick_Handler() {
 }
 
 __attribute__((naked)) void PendSV_Handler(){
-	__asm volatile("PUSH {LR}");
+	//__asm volatile("PUSH {LR}");
 
 	/* SAVE CONTEXT OF THE CURRENT TASK */
 
@@ -348,7 +361,7 @@ __attribute__((naked)) void PendSV_Handler(){
 	__asm volatile("MRS R0,PSP");
 
 	//save SF2 for the current task using its PSP
-	__asm volatile("STMDB R0!,{R4-R11}");
+	__asm volatile("STMDB R0!,{R4-R11, R14}");
 
 	/* WOULDN'T THESE REGISTER HAVE GOT UPDATED BY OTHER HIGHER PRIO ISRs BEFORE IT COULD BE SAVED HERE??
 	* ANSWER IS NO, BECAUSE AS PER AAPCS THESE REGISTERS R4-R11 VALUE HAVE TO BE PRESERVED BY THE CALLED
@@ -365,7 +378,7 @@ __attribute__((naked)) void PendSV_Handler(){
 	//get PSP for the next task
 	__asm volatile("BL get_psp_value");
 	//restore/pop SF2 for the next task using its PSP
-	__asm volatile("LDMIA R0!,{R4-R11}");
+	__asm volatile("LDMIA R0!,{R4-R11, R14}");
 	//SET PSP = NEXT TASK PSP
 	__asm volatile("MSR PSP,R0");
 
@@ -373,8 +386,36 @@ __attribute__((naked)) void PendSV_Handler(){
 	 * its execution resumes from the location stored in SF1 PC */
 
 	//__asm volatile("POP {LR}");
-	//__asm volatile("BX LR");
-	__asm volatile("POP {PC}");
+	__asm volatile("BX LR");
+	//__asm volatile("POP {PC}");
+}
+
+__attribute__((naked)) void SVC_Handler()
+{
+	__asm volatile("PUSH {LR}");
+	__asm volatile("BL get_psp_value");//"branch with link" instead of just "branch" as we want control to reach back here after that function return
+	__asm volatile("LDMIA R0!,{R4-R11, R14}");
+	__asm volatile("MSR PSP,R0");//initialize the PSP
+	__asm volatile("BX LR");
+}
+
+void launch_first_task()
+{
+	__asm volatile("SVC 0x00");
+}
+
+void start_scheduler(void) {
+	/* setting MSP to a scheduler stack start which
+	 * is pointing to the top of scheduler stack area
+	 * to keep a separate stack for handler mode code
+	 * that utilizes the stack via MSP */
+	init_scheduler_stack(SCHEDULER_STACK_START);
+
+	init_tasks();
+
+	init_systick_timer(TICK_HZ);
+
+	launch_first_task();
 }
 
 /* Main Function */
@@ -388,24 +429,8 @@ int main(void)
 
 	printf("Application Running\n");
 
-	/* setting MSP to a scheduler stack start which
-	 * is pointing to the top of scheduler stack area
-	 * to keep a separate stack for handler mode code
-	 * that utilizes the stack via MSP */
-	init_scheduler_stack(SCHEDULER_STACK_START);
-
-	init_tasks();
-
-	init_systick_timer(TICK_HZ);
-
-	/* switch from MSP to PSP initialized to the Task1 PSP Start
-	 * Note: Till this point MSP was used which was initialized to the
-	 * the top of stack = Task1 PSP Start */
-	switch_from_msp_to_psp();
-
-	/* launch one of the task */
-	g_current_task = TASK_1;
-	task1_handler();
+	/* start scheduler */
+	start_scheduler();
 
     /* Loop forever */
 	for(;;);
